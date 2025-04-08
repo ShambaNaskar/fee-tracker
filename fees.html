@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Student Fee Tracker</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+        }
+        .container {
+            max-width: 100%;
+            overflow-x: hidden;
+        }
+        h1 {
+            font-size: 1.5em;
+            margin-bottom: 15px;
+        }
+        .table-container {
+            width: 100%;
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+        table {
+            border-collapse: collapse;
+            min-width: 800px;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: center;
+        }
+        th {
+            background-color: #f2f2f2;
+            position: sticky;
+            top: 0;
+        }
+        td.name-cell {
+            position: sticky;
+            left: 0;
+            background-color: #fff;
+            min-width: 100px;
+            z-index: 1;
+        }
+        th.name-header {
+            position: sticky;
+            left: 0;
+            z-index: 2;
+        }
+        .month-cell {
+            min-width: 60px;
+        }
+        .student-input {
+            margin-top: 20px;
+            display: flex;
+            gap: 10px;
+        }
+        input[type="text"] {
+            padding: 5px;
+            width: 60%;
+        }
+        button {
+            padding: 5px 10px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        .delete-btn {
+            background-color: #f44336;
+        }
+        .delete-btn:hover {
+            background-color: #da190b;
+        }
+        .popup-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+        .popup-content {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            max-width: 400px;
+            width: 90%;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            text-align: center;
+        }
+        .popup-content h3 {
+            margin: 0 0 15px 0;
+            color: #333;
+        }
+        .popup-content p {
+            margin: 0 0 20px 0;
+            color: #666;
+        }
+        .popup-buttons {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+        }
+        .popup-btn {
+            padding: 8px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            min-width: 80px;
+        }
+        .popup-confirm {
+            background-color: #4CAF50;
+        }
+        .popup-cancel {
+            background-color: #f44336;
+        }
+        @media (max-width: 768px) {
+            input[type="text"] {
+                width: 50%;
+            }
+            td.name-cell {
+                min-width: 80px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Student Fee Tracker</h1>
+        <div class="table-container">
+            <table id="feeTable">
+                <thead>
+                    <tr>
+                        <th class="name-header">Student Name</th>
+                        <th class="month-cell">Jan</th>
+                        <th class="month-cell">Feb</th>
+                        <th class="month-cell">Mar</th>
+                        <th class="month-cell">Apr</th>
+                        <th class="month-cell">May</th>
+                        <th class="month-cell">Jun</th>
+                        <th class="month-cell">Jul</th>
+                        <th class="month-cell">Aug</th>
+                        <th class="month-cell">Sep</th>
+                        <th class="month-cell">Oct</th>
+                        <th class="month-cell">Nov</th>
+                        <th class="month-cell">Dec</th>
+                        <th class="month-cell">Action</th>
+                    </tr>
+                </thead>
+                <tbody id="tableBody"></tbody>
+            </table>
+        </div>
+        <div class="student-input">
+            <input type="text" id="studentName" placeholder="Enter student name">
+            <button onclick="showAddStudentPopup()">Add Student</button>
+        </div>
+    </div>
+
+    <div class="popup-overlay" id="customPopup">
+        <div class="popup-content">
+            <h3 id="popupTitle"></h3>
+            <p id="popupMessage"></p>
+            <div class="popup-buttons">
+                <button class="popup-btn popup-confirm" id="popupConfirm">Yes</button>
+                <button class="popup-btn popup-cancel" id="popupCancel">No</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let db;
+        const request = indexedDB.open("FeeTrackerDB", 1);
+
+        request.onerror = (event) => {
+            console.error("Database error:", event.target.errorCode);
+        };
+
+        request.onsuccess = (event) => {
+            db = event.target.result;
+            loadStudents();
+        };
+
+        request.onupgradeneeded = (event) => {
+            db = event.target.result;
+            const objectStore = db.createObjectStore("students", { keyPath: "id", autoIncrement: true });
+            objectStore.createIndex("name", "name", { unique: false });
+            objectStore.createIndex("fees", "fees", { unique: false });
+        };
+
+        const months = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+
+        const popup = document.getElementById('customPopup');
+        const popupTitle = document.getElementById('popupTitle');
+        const popupMessage = document.getElementById('popupMessage');
+        const popupConfirm = document.getElementById('popupConfirm');
+        const popupCancel = document.getElementById('popupCancel');
+
+        function showPopup(title, message, onConfirm, onCancel = () => {}) {
+            popupTitle.textContent = title;
+            popupMessage.textContent = message;
+            popup.style.display = 'flex';
+
+            const confirmHandler = () => {
+                onConfirm();
+                closePopup();
+                popupConfirm.removeEventListener('click', confirmHandler);
+                popupCancel.removeEventListener('click', cancelHandler);
+            };
+
+            const cancelHandler = () => {
+                onCancel();
+                closePopup();
+                popupConfirm.removeEventListener('click', confirmHandler);
+                popupCancel.removeEventListener('click', cancelHandler);
+            };
+
+            popupConfirm.addEventListener('click', confirmHandler);
+            popupCancel.addEventListener('click', cancelHandler);
+        }
+
+        function closePopup() {
+            popup.style.display = 'none';
+        }
+
+        function showAddStudentPopup() {
+            const name = document.getElementById('studentName').value.trim();
+            if (!name) return;
+
+            showPopup(
+                'Confirm Addition',
+                `Are you sure you want to add ${name}?`,
+                () => addStudent(name)
+            );
+        }
+
+        function addStudent(name) {
+            const transaction = db.transaction(["students"], "readwrite");
+            const objectStore = transaction.objectStore("students");
+            
+            const student = {
+                name: name,
+                fees: {
+                    jan: false, feb: false, mar: false, apr: false, may: false, jun: false,
+                    jul: false, aug: false, sep: false, oct: false, nov: false, dec: false
+                }
+            };
+
+            const request = objectStore.add(student);
+            
+            request.onsuccess = () => {
+                document.getElementById('studentName').value = '';
+                loadStudents();
+            };
+        }
+
+        function loadStudents() {
+            const tbody = document.getElementById('tableBody');
+            tbody.innerHTML = '';
+
+            const transaction = db.transaction(["students"], "readonly");
+            const objectStore = transaction.objectStore("students");
+            const request = objectStore.getAll();
+
+            request.onsuccess = (event) => {
+                const students = event.target.result;
+                
+                students.forEach(student => {
+                    const row = document.createElement('tr');
+                    
+                    const nameCell = document.createElement('td');
+                    nameCell.textContent = student.name;
+                    nameCell.className = 'name-cell';
+                    row.appendChild(nameCell);
+
+                    months.forEach(month => {
+                        const cell = document.createElement('td');
+                        cell.className = 'month-cell';
+                        const checkbox = document.createElement('input');
+                        checkbox.type = 'checkbox';
+                        checkbox.checked = student.fees[month];
+                        checkbox.onchange = (e) => showFeeUpdatePopup(student.id, month, e.target, student.name);
+                        cell.appendChild(checkbox);
+                        row.appendChild(cell);
+                    });
+
+                    const deleteCell = document.createElement('td');
+                    deleteCell.className = 'month-cell';
+                    const deleteBtn = document.createElement('button');
+                    deleteBtn.textContent = 'Delete';
+                    deleteBtn.className = 'delete-btn';
+                    deleteBtn.onclick = () => showDeleteStudentPopup(student.id, student.name);
+                    deleteCell.appendChild(deleteBtn);
+                    row.appendChild(deleteCell);
+
+                    tbody.appendChild(row);
+                });
+
+                setInitialScrollPosition();
+            };
+        }
+
+        function setInitialScrollPosition() {
+            const tableContainer = document.querySelector('.table-container');
+            const currentDate = new Date();
+            const currentMonth = currentDate.getMonth();
+            const targetMonthIndex = Math.max(0, currentMonth - 2);
+            const nameCellWidth = 100;
+            const monthCellWidth = 60;
+            const scrollPosition = nameCellWidth + (targetMonthIndex * monthCellWidth);
+            tableContainer.scrollLeft = scrollPosition;
+        }
+
+        function showFeeUpdatePopup(studentId, month, checkbox, studentName) {
+            const action = checkbox.checked ? 'mark as paid' : 'mark as unpaid';
+            const originalState = !checkbox.checked; // Store original state for cancel
+            
+            showPopup(
+                'Confirm Fee Update',
+                `Are you sure you want to ${action} ${month} fee for ${studentName}?`,
+                () => updateFee(studentId, month, checkbox.checked),
+                () => checkbox.checked = originalState // Revert on cancel
+            );
+        }
+
+        function updateFee(studentId, month, value) {
+            const transaction = db.transaction(["students"], "readwrite");
+            const objectStore = transaction.objectStore("students");
+            const request = objectStore.get(studentId);
+
+            request.onsuccess = (event) => {
+                const student = event.target.result;
+                student.fees[month] = value;
+                
+                const updateRequest = objectStore.put(student);
+                updateRequest.onsuccess = () => {
+                    console.log('Fee updated successfully');
+                };
+            };
+        }
+
+        function showDeleteStudentPopup(studentId, studentName) {
+            showPopup(
+                'Confirm Deletion',
+                `Are you sure you want to delete ${studentName} and all their fee records?`,
+                () => deleteStudent(studentId)
+            );
+        }
+
+        function deleteStudent(studentId) {
+            const transaction = db.transaction(["students"], "readwrite");
+            const objectStore = transaction.objectStore("students");
+            const request = objectStore.delete(studentId);
+
+            request.onsuccess = () => {
+                loadStudents();
+            };
+        }
+    </script>
+</body>
+</html>
